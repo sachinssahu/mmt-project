@@ -284,7 +284,7 @@ Table routes {
   id integer [pk, increment]
   from_city_id integer [not null]
   to_city_id integer [not null]
-  distance_km integer
+  distance_km integer [not null]
   duration_minutes integer [not null]
   created_at timestamp [not null, default: `now()`]
   updated_at timestamp [not null, default: `now()`]

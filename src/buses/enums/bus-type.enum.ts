@@ -1,0 +1,6 @@
+export enum BusType {
+  AC_SLEEPER = 'AC_SLEEPER',
+  NON_AC_SLEEPER = 'NON_AC_SLEEPER',
+  AC_SEATER = 'AC_SEATER',
+  NON_AC_SEATER = 'NON_AC_SEATER',
+}
