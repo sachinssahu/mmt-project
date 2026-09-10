@@ -12,6 +12,8 @@ import { BookingsModule } from './bookings/bookings.module';
 import { PaymentsModule } from './payments/payments.module';
 import { CitiesModule } from './cities/cities.module';
 import { AuthModule } from './auth/auth.module';
+import { join } from 'path';
+import { ServeStaticModule } from '@nestjs/serve-static';
 
 @Module({
   imports: [
@@ -28,6 +30,9 @@ import { AuthModule } from './auth/auth.module';
         autoLoadEntities: true,
         synchronize: false,
       }),
+    }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'public'),
     }),
     UsersModule,
     OperatorsModule,
