@@ -11,6 +11,7 @@ import { TripsModule } from './trips/trips.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { PaymentsModule } from './payments/payments.module';
 import { CitiesModule } from './cities/cities.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { CitiesModule } from './cities/cities.module';
     BookingsModule,
     PaymentsModule,
     CitiesModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
