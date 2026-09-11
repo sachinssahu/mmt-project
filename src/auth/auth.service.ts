@@ -49,16 +49,16 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!existing) {
-      throw new UnauthorizedException('email not found');
-      //   throw new UnauthorizedException('Invalid credentials');
+      // throw new UnauthorizedException('email not found');
+        throw new UnauthorizedException('Invalid credentials');
     }
     const checkPasswordHash = await bcrypt.compare(
       dto.password,
       existing.passwordHash,
     );
     if (!checkPasswordHash) {
-      throw new UnauthorizedException('incorrect password');
-      //   throw new UnauthorizedException('Invalid credentials');
+      // throw new UnauthorizedException('incorrect password');
+        throw new UnauthorizedException('Invalid credentials');
     }
     const payload = {
       sub: existing.id,

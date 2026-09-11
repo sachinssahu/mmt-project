@@ -8,7 +8,7 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
-  @Matches(/^[6-9]\d{9}$/, {
+  @Matches(/^[1-9]\d{9}$/, {
     message: 'phone must be a valid 10-digit Indian number',
   })
   phone: string;
