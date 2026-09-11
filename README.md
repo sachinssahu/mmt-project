@@ -1,114 +1,197 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# MMT — Bus Ticket Booking
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A backend for booking bus tickets. Search buses between two cities on a date, pick specific seats, enter passenger details, and book.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Built with **NestJS**, **TypeORM** and **PostgreSQL**. Backend-heavy by design — the schema and the concurrency handling are the focus, not the UI.
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## The core problem
 
-## Project setup
+**A seat must never be sold twice, even when two people click it at the same millisecond.**
 
-```bash
-$ npm install
+A check in application code cannot win that race — there is always a gap between "is this seat free?" and "insert the booking". Two requests can both pass the check before either inserts.
+
+So the guarantee lives in the database:
+
+```sql
+UNIQUE (trip_id, seat_id)
 ```
 
-## Compile and run the project
+Both requests attempt the insert. Postgres accepts the first and rejects the second. The application catches that rejection and tells the second user to pick another seat.
+
+The database is the referee — the constraint holds no matter how fast requests arrive or how many app servers are running.
+
+---
+
+## Schema
+
+ER diagram: https://dbdiagram.io/d/mmt_bus-6aa14a7170fd27e3c75a1d79
+
+10 tables: `users`, `operators`, `buses`, `seats`, `cities`, `routes`, `trips`, `bookings`, `booking_seats`, `payments`.
+
+### Two design decisions worth calling out
+
+**A booking points at a Trip, not a Bus.**
+Bus KA-01-1234 runs Bangalore→Chennai tonight and Chennai→Bangalore tomorrow. A Trip is a specific bus, on a specific route, departing at a specific date and time. Booking against the Bus breaks the moment the same bus runs twice.
+
+**Availability is derived, never stored.**
+There is no `isAvailable` column on `seats`. Seat 12 is booked on tonight's trip and free on tomorrow's — one boolean cannot hold two truths. A seat is free on a trip if no `booking_seats` row exists for that `(trip_id, seat_id)`. The booking rows *are* the availability data, so nothing can drift out of sync.
+
+The same reasoning removed `maxSeats` from `buses` — the real count is `SELECT COUNT(*) FROM seats WHERE bus_id = ?`.
+
+### Constraints enforced at the database level
+
+| Constraint | Purpose |
+|---|---|
+| `UNIQUE (trip_id, seat_id)` on `booking_seats` | prevents double-booking |
+| `UNIQUE (bus_id, seat_number)` on `seats` | no two seats "A1" on one bus |
+| `UNIQUE (from_city_id, to_city_id)` on `routes` | no duplicate routes |
+| `UNIQUE (name, state)` on `cities` | no duplicate cities |
+| `CHECK (age > 0 AND age < 100)` on `booking_seats` | valid passenger age |
+| `INDEX (route_id, departure_time)` on `trips` | search performance |
+
+---
+
+## Tech choices
+
+| Choice | Why |
+|---|---|
+| **TypeORM** over Sequelize | TypeScript-native and decorator-based, so it matches NestJS's own design. Ships an official `@nestjs/typeorm` module, and entity classes double as type definitions. |
+| **PostgreSQL** | Strong transaction, locking and constraint support — exactly what the double-booking problem needs. Partial indexes are useful for the planned soft-delete work. |
+| **Docker for Postgres** | `docker-compose.yml` lives in the repo, so anyone cloning gets an identical database in one command. No local install to maintain. |
+| **Migrations, `synchronize: false`** | Auto-sync silently drops columns that have data in them. Every schema change is an explicit, reviewable file. |
+| **`decimal(10,2)` for money** | `integer` can't hold ₹450.50; `float` causes rounding errors. |
+| **Phone stored E.164** (`+919876543210`) | The UI accepts 10 digits and the service prepends `+91`. Supporting other countries later needs no migration. |
+| **Enums over varchar** | `varchar` would happily accept `"adminn"`. |
+
+---
+
+## Running locally
+
+**Prerequisites:** Node (see `.nvmrc`), Docker.
 
 ```bash
-# development
-$ npm run start
+git clone https://github.com/sachinssahu/mmt-project.git
+cd mmt-project
 
-# watch mode
-$ npm run start:dev
+nvm use                    # Node version from .nvmrc
+npm install
 
-# production mode
-$ npm run start:prod
+cp .env.example .env       # fill in values
+
+docker compose up -d       # starts Postgres, creates the mmt_bus database
+npm run migration:run      # creates the tables
+
+npm run start:dev
 ```
 
-## Run tests
+- API → http://localhost:3000
+- Swagger docs → http://localhost:3000/api
+
+> The default Postgres port 5432 is often already taken. `docker-compose.yml` maps it to **5433** on the host, so `.env` must use `DB_PORT=5433`.
+
+### Migration commands
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run migration:generate -- src/migrations/Name   # generate from entity diff
+npm run migration:show                              # [X] applied, [ ] pending
+npm run migration:run
+npm run migration:revert
 ```
 
-## Deployment
+---
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## API
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/auth/register` | — | Create an account |
+| `POST` | `/auth/login` | — | Returns a JWT access token |
+| `GET` | `/auth/me` | Bearer | Current user from the token |
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+Protected routes expect `Authorization: Bearer <token>`.
+
+Full request and response shapes are browsable in Swagger at `/api`.
+
+### Validation
+
+Every endpoint validates its input with `class-validator` DTOs. The global pipe runs with `whitelist: true`, which strips any property not declared on the DTO — so a request body containing `role: "ADMIN"` has that field silently dropped rather than honoured.
+
+### Passwords
+
+Hashed with bcrypt (cost factor 10). The plaintext password is never stored, and the hash is never returned in any response.
+
+---
+
+## Project structure
+
+```
+src/
+  auth/
+    dto/                   # RegisterDto, LoginDto
+    guards/                # JwtAuthGuard
+    strategies/            # JwtStrategy
+    decorators/            # @CurrentUser()
+  users/
+    entities/
+    enums/
+  buses/
+    entities/              # Bus, Seat — Seat has no meaning without a Bus
+    enums/
+  bookings/
+    entities/              # Booking, BookingSeat
+    enums/
+  cities/ operators/ routes/ trips/ payments/
+  common/
+    entities/base.entity.ts   # shared createdAt / updatedAt
+  migrations/
+  data-source.ts           # TypeORM CLI config (runs outside Nest, so reads .env directly)
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Feature-based folders, matching the conventions used on my team. Sub-entities live under the feature that owns them.
 
-## Observability
+---
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+## Status
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+**Done**
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
+- [x] Schema design and ER diagram
+- [x] 10 entities with relations, indexes and constraints
+- [x] Migrations
+- [x] Register / login with bcrypt and JWT
+- [x] JWT strategy, guard, and a protected route
+- [x] DTO validation
+- [x] Swagger docs
 
-## Resources
+**In progress**
 
-Check out a few resources that may come in handy when working with NestJS:
+- [ ] Seed script
+- [ ] `GET /trips` — search by route and date
+- [ ] `GET /trips/:id/seats` — seat map
+- [ ] `POST /bookings` — booking inside a transaction
+- [ ] `GET /bookings` — booking history
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+---
 
-## Support
+## Deliberately deferred
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Scope cut on purpose, with reasons — not things that were forgotten.
 
-## Stay in touch
+| Deferred | Reason |
+|---|---|
+| **Soft delete (`deletedAt`)** | Retrofitting it onto `booking_seats` means rebuilding the unique constraint as a **partial index** (`WHERE deleted_at IS NULL`) — a soft-deleted row would otherwise occupy the seat forever. TypeORM can't generate partial indexes, so it's a hand-written migration. Left as a deliberate exercise. |
+| **Payment gateway** | Status field only. A real integration would consume the whole timeline without demonstrating anything about the schema. |
+| **Cancellation and refunds** | Depends on soft delete above. |
+| **Bus operator as a user role** | No functional requirement uses it yet. Unused roles shouldn't sit in the schema. |
+| **Admin CRUD APIs** | Seeding covers the same need for now. |
+| **Notifications, OTP login** | Both need third-party providers. |
+| **Observability** | Would use OpenTelemetry rather than a vendor SDK, so the same instrumentation works with Datadog. |
+| **Frontend** | Backend-first by design. A minimal static page exists for manual testing. |
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+---
 
-## License
+## Notes
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+`notes/` contains the working notes written while building this — design decisions, things that broke and why, and the reasoning behind each choice.
