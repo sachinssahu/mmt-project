@@ -6,15 +6,15 @@ import { Strategy, ExtractJwt } from 'passport-jwt';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(config: ConfigService) {
-    const secret = config.get<string>('JWT_SECRET')
+    const secret = config.get<string>('JWT_SECRET');
     if (!secret) {
-        throw new Error('JWT_SECRET is not set in environment')
+      throw new Error('JWT_SECRET is not set in environment');
     }
 
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: secret
+      secretOrKey: secret,
     });
   }
 
