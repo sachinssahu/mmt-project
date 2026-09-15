@@ -1,7 +1,6 @@
-export enum BookingStatus {
+export enum LegStatus {
   PENDING = 'PENDING',
   CONFIRMED = 'CONFIRMED',
-  PARTIALLY_CANCELLED = 'PARTIALLY_CANCELLED',
   CANCELLED = 'CANCELLED',
   EXPIRED = 'EXPIRED',
 }
