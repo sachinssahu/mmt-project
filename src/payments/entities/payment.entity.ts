@@ -44,5 +44,5 @@ export class Payment extends BaseEntity {
   transactionRef: string;
 
   @Column({ type: 'timestamptz', name: 'paid_at', nullable: true })
-  paidAt: Date;
+  paidAt: Date | null;
 }
