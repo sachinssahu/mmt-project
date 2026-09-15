@@ -11,6 +11,7 @@ import { TripsModule } from './trips/trips.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { PaymentsModule } from './payments/payments.module';
 import { CitiesModule } from './cities/cities.module';
+import { StopsModule } from './stops/stops.module';
 import { AuthModule } from './auth/auth.module';
 import { join } from 'path';
 import { ServeStaticModule } from '@nestjs/serve-static';
@@ -42,6 +43,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
     BookingsModule,
     PaymentsModule,
     CitiesModule,
+    StopsModule,
     AuthModule,
   ],
   controllers: [AppController],

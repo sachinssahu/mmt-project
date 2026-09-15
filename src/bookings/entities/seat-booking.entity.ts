@@ -56,6 +56,10 @@ export class SeatBooking extends BaseEntity {
   @Column({ name: 'to_seq', type: 'smallint' })
   toSeq: number;
 
-  @Column({ type: 'enum', enum: SeatBookingStatus, default: SeatBookingStatus.HELD })
+  @Column({
+    type: 'enum',
+    enum: SeatBookingStatus,
+    default: SeatBookingStatus.HELD,
+  })
   status: SeatBookingStatus;
 }
