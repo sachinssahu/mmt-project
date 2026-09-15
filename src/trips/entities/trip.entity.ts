@@ -10,9 +10,13 @@ import { Bus } from '../../buses/entities/bus.entity';
 import { Route } from '../../routes/entities/route.entity';
 import { TripStatus } from '../enums/trip-status.enum';
 import { BaseEntity } from '../../common/entities/base.entity';
+import { numericTransformer } from '../../common/transformers/numeric.transformer';
 
 @Entity('trips')
-@Index('idx_trip_route_departure', ['routeId', 'departureTime'])
+@Index('uq_bus_not_double_booked', ['busId', 'baseDepartureAt'], {
+  unique: true,
+})
+@Index('idx_trip_route_date', ['routeId', 'serviceDate'])
 export class Trip extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -31,14 +35,21 @@ export class Trip extends BaseEntity {
   @Column({ name: 'route_id' })
   routeId: number;
 
-  @Column({ name: 'departure_time', type: 'timestamptz' })
-  departureTime: Date;
+  @Column({ name: 'service_date', type: 'date' })
+  serviceDate: string;
 
-  @Column({ name: 'arrival_time', type: 'timestamptz' })
-  arrivalTime: Date;
+  @Column({ name: 'base_departure_at', type: 'timestamptz' })
+  baseDepartureAt: Date;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
-  fare: number;
+  @Column({
+    name: 'fare_multiplier',
+    default: 1,
+    type: 'decimal',
+    precision: 4,
+    scale: 2,
+    transformer: numericTransformer,
+  })
+  fareMultiplier: number;
 
   @Column({ type: 'enum', enum: TripStatus, default: TripStatus.SCHEDULED })
   status: TripStatus;

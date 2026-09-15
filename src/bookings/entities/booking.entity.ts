@@ -8,11 +8,12 @@ import {
 } from 'typeorm';
 import { BookingStatus } from '../enums/booking-status.enum';
 import { User } from '../../users/entities/user.entity';
-import { Trip } from '../../trips/entities/trip.entity';
 import { BaseEntity } from '../../common/entities/base.entity';
+import { numericTransformer } from '../../common/transformers/numeric.transformer';
 
 @Entity('bookings')
-@Index('idx_booking_user', ['userId'])
+@Index('idx_booking_user', ['userId', 'createdAt'])
+@Index('idx_booking_sweeper', ['status', 'holdExpiresAt'])
 export class Booking extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -24,16 +25,24 @@ export class Booking extends BaseEntity {
   @Column({ name: 'user_id' })
   userId: number;
 
-  @ManyToOne(() => Trip)
-  @JoinColumn({ name: 'trip_id' })
-  trip: Trip;
+  @Column({ length: 10, unique: true })
+  pnr: string;
 
-  @Column({ name: 'trip_id' })
-  tripId: number;
+  @Column({ default: false, name: 'is_break_journey' })
+  isBreakJourney: boolean;
+
+  @Column({ name: 'hold_expires_at', nullable: true, type: 'timestamptz' })
+  holdExpiresAt: Date | null;
 
   @Column({ type: 'enum', enum: BookingStatus, default: BookingStatus.PENDING })
   status: BookingStatus;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'total_amount' })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    name: 'total_amount',
+    transformer: numericTransformer,
+  })
   totalAmount: number;
 }
